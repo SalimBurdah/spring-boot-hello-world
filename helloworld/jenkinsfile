@@ -1,0 +1,59 @@
+pipeline {
+    agent any
+    tools {
+        maven 'maven'
+    }
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git(
+                    url: 'https://github.com/SalimBurdah/spring-boot-hello-world.git',
+                    branch: 'main',
+                    credentialsId: 'github'
+                )
+            }
+        }
+        stage('Build Maven') {
+            steps {
+                dir('helloworld') { 
+                    sh 'mvn clean install'
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dir('helloworld') { 
+                        sh 'docker build -t salimburdah/spring-boot-hello-world:v1.${BUILD_ID} .'
+                        sh 'docker build -t salimburdah/spring-boot-hello-world:latest .'
+                    }
+                }
+            }
+        }
+        stage('Push Image to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'salimburdah', passwordVariable: 'docker_pass')]) {
+                        sh 'docker login -u salimburdah -p ${docker_pass}'
+                    }
+                    sh 'docker push salimburdah/spring-boot-hello-world:v1.${BUILD_ID}'
+                    sh 'docker push salimburdah/spring-boot-hello-world:latest'
+                }
+            }
+        }
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    kubernetesDeploy(
+                        configs: 'helloworld/deployment.yaml',
+                        kubeconfigId: 'k8sconfig'
+                    )
+                    kubernetesDeploy(
+                        configs: 'helloworld/service.yaml',
+                        kubeconfigId: 'k8sconfig'
+                    )
+                }
+            }
+        }
+    }
+}
